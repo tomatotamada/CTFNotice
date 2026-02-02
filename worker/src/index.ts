@@ -150,11 +150,6 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   const args = text.split(/\s+/);
   const subcommand = args[0]?.toLowerCase();
 
-  // Debug: show what we received
-  if (subcommand === "debug" || (subcommand !== "watch" && subcommand !== "unwatch" && subcommand !== "list" && subcommand !== "add")) {
-    return slackResponse(`DEBUG INFO:\ncommand: ${command}\ntext: "${text}"\nargs: ${JSON.stringify(args)}\nsubcommand: "${subcommand}"`);
-  }
-
   // /ctf add <start_datetime> <title...>
   if (subcommand === "add") {
     // Slack removes quotes, so we need to handle: "add 2026-03-15T10:00 Title" or "add 2026-03-15 10:00 Title"
