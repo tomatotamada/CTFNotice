@@ -1,0 +1,44 @@
+name: Check CTF Events
+
+on:
+  schedule:
+    # 毎時0分に実行 (UTC)
+    - cron: '0 * * * *'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore seen events cache
+        uses: actions/cache@v4
+        with:
+          path: data/seen_events.json
+          key: seen-events-${{ github.run_id }}
+          restore-keys: |
+            seen-events-
+
+      - name: Check for new CTF events
+        run: npm run check
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DAYS_AHEAD: '30'
+
+      - name: Save seen events
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/seen_events.json
+          key: seen-events-${{ github.run_id }}
