@@ -152,17 +152,40 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
 
   // /ctf add <start_datetime> <title...>
   if (subcommand === "add") {
-    if (args.length < 3) {
-      return slackResponse("❌ 使用方法: `/ctf add <開始日時> <タイトル>`\n例: `/ctf add 2026-03-15T10:00 My Event` または `/ctf add \"2026-03-15 10:00\" Company CTF`");
+    // "add 2026-03-15T10:00 Title" or "add \"2026-03-15 10:00\" Title"
+    const remaining = text.slice(subcommand.length).trim();
+
+    let dateTimeStr: string;
+    let titleStart: number;
+
+    if (remaining.startsWith('"')) {
+      // quoted: "2026-03-15 10:00" Title
+      const endQuote = remaining.indexOf('"', 1);
+      if (endQuote === -1) {
+        return slackResponse("❌ 引用符が閉じられていません");
+      }
+      dateTimeStr = remaining.slice(1, endQuote);
+      titleStart = endQuote + 1;
+    } else {
+      // unquoted: 2026-03-15T10:00 Title
+      const spaceIndex = remaining.indexOf(' ');
+      if (spaceIndex === -1) {
+        return slackResponse("❌ タイトルを指定してください");
+      }
+      dateTimeStr = remaining.slice(0, spaceIndex);
+      titleStart = spaceIndex;
     }
 
-    const dateTimeStr = args[1];
+    const title = remaining.slice(titleStart).trim();
+    if (!title) {
+      return slackResponse("❌ タイトルを指定してください");
+    }
+
     const startDate = parseDateTime(dateTimeStr);
     if (!startDate) {
       return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\``);
     }
 
-    const title = args.slice(2).join(" ");
     const customEventId = generateCustomEventId();
 
     const list = await getWatchlist(env.WATCHLIST);
