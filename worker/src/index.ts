@@ -152,38 +152,37 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
 
   // /ctf add <start_datetime> <title...>
   if (subcommand === "add") {
-    // "add 2026-03-15T10:00 Title" or "add \"2026-03-15 10:00\" Title"
-    const remaining = text.slice(subcommand.length).trim();
-
-    let dateTimeStr: string;
-    let titleStart: number;
-
-    if (remaining.startsWith('"')) {
-      // quoted: "2026-03-15 10:00" Title
-      const endQuote = remaining.indexOf('"', 1);
-      if (endQuote === -1) {
-        return slackResponse("❌ 引用符が閉じられていません");
-      }
-      dateTimeStr = remaining.slice(1, endQuote);
-      titleStart = endQuote + 1;
-    } else {
-      // unquoted: 2026-03-15T10:00 Title
-      const spaceIndex = remaining.indexOf(' ');
-      if (spaceIndex === -1) {
-        return slackResponse("❌ タイトルを指定してください");
-      }
-      dateTimeStr = remaining.slice(0, spaceIndex);
-      titleStart = spaceIndex;
+    // Slack removes quotes, so we need to handle: "add 2026-03-15T10:00 Title" or "add 2026-03-15 10:00 Title"
+    if (args.length < 4) {
+      return slackResponse("❌ 使用方法: `/ctf add <開始日時> <タイトル>`\n例: `/ctf add 2026-03-15T10:00 My Event` または `/ctf add 2026-03-15 10:00 My Event`");
     }
 
-    const title = remaining.slice(titleStart).trim();
+    // Try to extract datetime from args
+    // args[0] = "add", args[1] = date or date, args[2] = time or title...
+    let dateTimeStr: string;
+    let titleStartIndex: number;
+
+    // Check if args[1] is ISO 8601 format (contains T)
+    if (args[1].includes('T')) {
+      // Format: 2026-03-15T10:00
+      dateTimeStr = args[1];
+      titleStartIndex = 2;
+    } else if (args[1].match(/^\d{4}-\d{2}-\d{2}$/) && args[2]?.match(/^\d{2}:\d{2}$/)) {
+      // Format: 2026-03-15 10:00 (split into two args)
+      dateTimeStr = args[1] + " " + args[2];
+      titleStartIndex = 3;
+    } else {
+      return slackResponse(`❌ 日時形式が正しくありません: ${args[1]} ${args[2] || ""}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\``);
+    }
+
+    const title = args.slice(titleStartIndex).join(" ");
     if (!title) {
       return slackResponse("❌ タイトルを指定してください");
     }
 
     const startDate = parseDateTime(dateTimeStr);
     if (!startDate) {
-      return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\`\n\nDEBUG: text="${text}" remaining="${remaining}" dateTimeStr="${dateTimeStr}"`);
+      return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\``);
     }
 
     const customEventId = generateCustomEventId();
