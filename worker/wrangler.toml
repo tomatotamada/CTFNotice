@@ -1,0 +1,16 @@
+name = "ctfnotice"
+main = "src/index.ts"
+compatibility_date = "2024-12-30"
+
+# KVストレージ (デプロイ後に作成してIDを設定)
+[[kv_namespaces]]
+binding = "WATCHLIST"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# 環境変数 (wrangler secret で設定)
+# SLACK_WEBHOOK_URL - Slack通知用
+# SLACK_SIGNING_SECRET - Slackリクエスト検証用
+
+# Cronトリガー: 毎時0分に実行
+[triggers]
+crons = ["0 * * * *"]

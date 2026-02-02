@@ -2,14 +2,27 @@
 
 CTFtime.org から新しいCTFイベントを検出し、Slackに通知するボットです。
 
-GitHub Actionsで定期実行され、新しいイベントが追加されると自動的にSlackチャンネルに通知します。
+## 2つのモード
+
+### 1. 新着通知 (GitHub Actions)
+GitHub Actionsで定期実行され、新しいイベントが追加されると自動的にSlackに通知します。
+
+### 2. リマインダー (Cloudflare Workers)
+Slackコマンドでイベントを登録し、開始24時間前・1時間前にリマインドします。
 
 ## 機能
 
+**新着通知:**
 - CTFtime.org APIから今後のCTFイベントを取得
 - 新規イベントを検出してSlackに通知
 - 重複通知の防止（通知済みイベントを記録）
 - GitHub Actionsによる自動定期実行
+
+**リマインダー:**
+- `/ctf watch <event_id>` - イベントをウォッチリストに追加
+- `/ctf unwatch <event_id>` - ウォッチリストから削除
+- `/ctf list` - ウォッチリストを表示
+- 開始24時間前・1時間前に自動リマインド
 
 ## セットアップ
 
@@ -91,12 +104,17 @@ CTFNotice/
 ├── .github/
 │   └── workflows/
 │       └── check-ctf.yml  # GitHub Actions ワークフロー
-├── src/
+├── src/                   # 新着通知 (GitHub Actions用)
 │   ├── index.ts           # メインエントリーポイント
 │   ├── config.ts          # 設定管理
 │   ├── ctftime.ts         # CTFtime APIクライアント
 │   ├── slack.ts           # Slack通知
 │   └── storage.ts         # 通知済みイベント管理
+├── worker/                # リマインダー (Cloudflare Workers用)
+│   ├── src/
+│   │   └── index.ts       # Workerメイン
+│   ├── wrangler.toml      # Cloudflare設定
+│   └── README.md          # Workerセットアップガイド
 ├── .env.example           # 環境変数テンプレート
 ├── package.json
 └── tsconfig.json
@@ -118,6 +136,10 @@ DEF CON CTF Qualifier 2025
 ────────────────────────
 ...
 ```
+
+## リマインダーのセットアップ
+
+リマインダー機能を使う場合は [worker/README.md](./worker/README.md) を参照してください。
 
 ## ライセンス
 
