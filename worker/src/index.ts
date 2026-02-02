@@ -14,9 +14,13 @@ interface Env {
 
 /** ウォッチリストのエントリ */
 interface WatchEntry {
-  eventId: number;
+  eventId: number | string;
   title: string;
   start: string;
+  finish?: string;
+  url?: string;
+  description?: string;
+  isCustom?: boolean;
   reminded24h: boolean;
   reminded1h: boolean;
   addedAt: string;
@@ -34,6 +38,39 @@ interface CTFEvent {
   format: string;
   weight: number;
   organizers: { id: number; name: string }[];
+}
+
+// ========== ユーティリティ関数 ==========
+
+/** 日時文字列をパース（複数形式対応）*/
+function parseDateTime(input: string): Date | null {
+  // ISO 8601形式
+  if (/^\d{4}-\d{2}-\d{2}T/.test(input)) {
+    const date = new Date(input);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // YYYY-MM-DD HH:MM 形式
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (match) {
+    const [, year, month, day, hour, minute] = match;
+    // JST (UTC+9) として解釈
+    const utcDate = new Date(Date.UTC(
+      parseInt(year, 10),
+      parseInt(month, 10) - 1,
+      parseInt(day, 10),
+      parseInt(hour, 10) - 9,
+      parseInt(minute, 10)
+    ));
+    return utcDate;
+  }
+
+  return null;
+}
+
+/** カスタムイベントIDを生成 */
+function generateCustomEventId(): string {
+  return `custom-${Date.now()}`;
 }
 
 // ========== CTFtime API ==========
@@ -89,6 +126,21 @@ function formatEventForSlack(event: CTFEvent): string {
     .join("\n");
 }
 
+function formatCustomEventForSlack(entry: WatchEntry): string {
+  const start = new Date(entry.start);
+  const parts = [
+    `*${entry.title}* 🔖`,
+    `📅 ${formatDate(start)}`,
+  ];
+  if (entry.url) {
+    parts.push(`🔗 <${entry.url}|リンク>`);
+  }
+  if (entry.description) {
+    parts.push(`📝 ${entry.description}`);
+  }
+  return parts.join("\n");
+}
+
 // ========== Slackコマンド処理 ==========
 
 async function handleSlackCommand(request: Request, env: Env): Promise<Response> {
@@ -97,6 +149,36 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   const text = (formData.get("text") as string || "").trim();
   const args = text.split(/\s+/);
   const subcommand = args[0]?.toLowerCase();
+
+  // /ctf add <start_datetime> <title...>
+  if (subcommand === "add") {
+    if (args.length < 3) {
+      return slackResponse("❌ 使用方法: `/ctf add <開始日時> <タイトル>`\n例: `/ctf add 2026-03-15T10:00 My Event` または `/ctf add \"2026-03-15 10:00\" Company CTF`");
+    }
+
+    const dateTimeStr = args[1];
+    const startDate = parseDateTime(dateTimeStr);
+    if (!startDate) {
+      return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\``);
+    }
+
+    const title = args.slice(2).join(" ");
+    const customEventId = generateCustomEventId();
+
+    const list = await getWatchlist(env.WATCHLIST);
+    list.push({
+      eventId: customEventId,
+      title,
+      start: startDate.toISOString(),
+      isCustom: true,
+      reminded24h: false,
+      reminded1h: false,
+      addedAt: new Date().toISOString(),
+    });
+    await saveWatchlist(env.WATCHLIST, list);
+
+    return slackResponse(`✅ *${title}* をウォッチリストに追加しました 🔖\n📅 ${formatDate(startDate)}\nID: \`${customEventId}\``);
+  }
 
   // /ctf watch <event_id or url>
   if (subcommand === "watch" && args[1]) {
@@ -132,7 +214,18 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   if (subcommand === "unwatch" && args[1]) {
     const eventId = extractEventId(args[1]);
     if (!eventId) {
-      return slackResponse("❌ イベントIDを指定してください");
+      // カスタムイベントIDの場合（文字列）
+      const eventIdStr = args.slice(1).join("-");
+      const list = await getWatchlist(env.WATCHLIST);
+      const index = list.findIndex((e) => e.eventId === eventIdStr);
+      if (index === -1) {
+        return slackResponse(`⚠️ イベントID ${eventIdStr} はウォッチリストにありません`);
+      }
+
+      const removed = list.splice(index, 1)[0];
+      await saveWatchlist(env.WATCHLIST, list);
+
+      return slackResponse(`🗑️ *${removed.title}* をウォッチリストから削除しました`);
     }
 
     const list = await getWatchlist(env.WATCHLIST);
@@ -151,7 +244,7 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   if (subcommand === "list" || !subcommand) {
     const list = await getWatchlist(env.WATCHLIST);
     if (list.length === 0) {
-      return slackResponse("📋 ウォッチリストは空です\n`/ctf watch <event_id>` で追加できます");
+      return slackResponse("📋 ウォッチリストは空です\n`/ctf watch <event_id>` または `/ctf add <日時> <タイトル>` で追加できます");
     }
 
     // 開始日時でソート
@@ -162,7 +255,9 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
       const now = new Date();
       const hoursUntil = Math.floor((start.getTime() - now.getTime()) / (1000 * 60 * 60));
       const status = hoursUntil < 0 ? "🔴 終了" : hoursUntil < 24 ? "🟡 まもなく" : "🟢";
-      return `${i + 1}. ${status} *${e.title}*\n   📅 ${formatDate(start)} (${hoursUntil > 0 ? `${hoursUntil}時間後` : "開始済み"})`;
+      const customBadge = e.isCustom ? " 🔖" : "";
+      const details = hoursUntil > 0 ? `${hoursUntil}時間後` : "開始済み";
+      return `${i + 1}. ${status} *${e.title}*${customBadge}\n   📅 ${formatDate(start)} (${details})`;
     });
 
     return slackResponse(`📋 *ウォッチリスト (${list.length}件)*\n\n${lines.join("\n\n")}`);
@@ -171,7 +266,9 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   // /ctf help
   return slackResponse(
     "*CTFNotice コマンド*\n\n" +
-      "`/ctf watch <event_id or url>` - イベントをウォッチリストに追加\n" +
+      "`/ctf add <日時> <タイトル>` - カスタムイベントを手動登録\n" +
+      "  例: `/ctf add 2026-03-15T10:00 My Event`\n\n" +
+      "`/ctf watch <event_id or url>` - CTFtimeイベントをウォッチリストに追加\n" +
       "`/ctf unwatch <event_id>` - イベントをウォッチリストから削除\n" +
       "`/ctf list` - ウォッチリストを表示\n" +
       "`/ctf help` - このヘルプを表示"
@@ -244,13 +341,20 @@ async function checkReminders(env: Env): Promise<void> {
 
   // リマインダー送信
   for (const { entry, type } of reminders) {
-    const event = await fetchEvent(entry.eventId);
     const emoji = type === "24h" ? "📢" : "🚨";
     const timeText = type === "24h" ? "24時間後" : "まもなく（1時間以内）";
 
+    let eventDetails: string;
+    if (entry.isCustom) {
+      eventDetails = formatCustomEventForSlack(entry);
+    } else {
+      const event = await fetchEvent(entry.eventId as number);
+      eventDetails = event ? formatEventForSlack(event) : `📅 ${formatDate(new Date(entry.start))}`;
+    }
+
     const text = `${emoji} *CTFリマインダー*\n\n` +
       `*${entry.title}* が${timeText}に開始します！\n\n` +
-      (event ? formatEventForSlack(event) : `📅 ${formatDate(new Date(entry.start))}`);
+      eventDetails;
 
     await sendSlackMessage(env.SLACK_WEBHOOK_URL, text);
   }
