@@ -183,7 +183,7 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
 
     const startDate = parseDateTime(dateTimeStr);
     if (!startDate) {
-      return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\``);
+      return slackResponse(`❌ 日時をパースできません: ${dateTimeStr}\n形式: \`2026-03-15T10:00\` または \`2026-03-15 10:00\`\n\nDEBUG: text="${text}" remaining="${remaining}" dateTimeStr="${dateTimeStr}"`);
     }
 
     const customEventId = generateCustomEventId();
