@@ -153,7 +153,7 @@ async function handleSlackCommand(request: Request, env: Env): Promise<Response>
   // /ctf add <start_datetime> <title...>
   if (subcommand === "add") {
     // Slack removes quotes, so we need to handle: "add 2026-03-15T10:00 Title" or "add 2026-03-15 10:00 Title"
-    if (args.length < 4) {
+    if (args.length < 3) {
       return slackResponse("❌ 使用方法: `/ctf add <開始日時> <タイトル>`\n例: `/ctf add 2026-03-15T10:00 My Event` または `/ctf add 2026-03-15 10:00 My Event`");
     }
 

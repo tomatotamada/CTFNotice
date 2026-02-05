@@ -5,7 +5,7 @@ compatibility_date = "2024-12-30"
 # KVストレージ (デプロイ後に作成してIDを設定)
 [[kv_namespaces]]
 binding = "WATCHLIST"
-id = "YOUR_KV_NAMESPACE_ID"
+id = "5991ba2abfed48f3a753b51df878f14c"
 
 # 環境変数 (wrangler secret で設定)
 # SLACK_WEBHOOK_URL - Slack通知用
